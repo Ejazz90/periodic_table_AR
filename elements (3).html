@@ -350,6 +350,27 @@ body{
   from{transform:rotateX(10deg) rotateY(0deg);}
   to{transform:rotateX(10deg) rotateY(360deg);}
 }
+.sphere-anchor{
+  position:absolute;
+  top:50%; left:50%;
+}
+.sphere-billboard{
+  position:absolute;
+  top:0; left:0;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--white);
+  font-weight:700;
+  font-family:'IBM Plex Mono',monospace;
+  z-index:2;
+  animation:counterTumble 16s linear infinite;
+}
+@keyframes counterTumble{
+  from{ transform:rotateY(0deg) rotateX(-10deg); }
+  to{ transform:rotateY(-360deg) rotateX(-10deg); }
+}
 .nucleus{
   position:absolute;
   top:50%; left:50%;
@@ -391,7 +412,8 @@ body{
   width:8px; height:8px;
   margin:-4px 0 0 -4px;
   border-radius:50%;
-  box-shadow:0 0 7px 2px rgba(255,255,255,0.55);
+  background:#000000;
+  box-shadow:0 0 6px 1px rgba(0,0,0,0.6);
 }
 .shell-caption{
   margin-top:6px;
@@ -767,8 +789,17 @@ body{
   width:6px; height:6px;
   margin:-3px 0 0 -3px;
   border-radius:50%;
-  background:rgba(255,241,168,0.95);
-  box-shadow:0 0 5px 1px rgba(255,241,168,0.65);
+  background:#000000;
+  box-shadow:0 0 5px 1px rgba(0,0,0,0.55);
+}
+.radical-dot{
+  position:absolute;
+  top:50%; left:50%;
+  width:6px; height:6px;
+  margin:-3px 0 0 -3px;
+  border-radius:50%;
+  background:#000000;
+  box-shadow:0 0 6px 1px rgba(0,0,0,0.6);
 }
 </style>
 </head>
@@ -1141,7 +1172,7 @@ function buildAtomModel(e){
     for(let j=0; j<electronCount; j++){
       const angle = (360 / electronCount) * j;
       const dot = document.createElement('div');
-      dot.className = 'electron cat-' + e.cat;
+      dot.className = 'electron';
       dot.style.transform = `rotate(${angle}deg) translateX(${radius}px)`;
       spin.appendChild(dot);
     }
@@ -1426,6 +1457,21 @@ function styleAtomSphere(el, symbol, sizeMultiplier){
   el.style.textShadow = '0 1px 2px rgba(0,0,0,0.45)';
 }
 
+// Creates a true-looking sphere: an invisible "anchor" that moves/orbits with the
+// tumbling parent (via translate3d), containing a "billboard" sphere that continuously
+// counter-rotates so it always faces the camera — giving it a real spherical silhouette
+// at every angle, instead of flattening into an ellipse like a plain rotated disc would.
+function createBillboardSphere(symbol, sizeMultiplier, extraClass){
+  const anchor = document.createElement('div');
+  anchor.className = 'sphere-anchor';
+  const inner = document.createElement('div');
+  inner.className = 'sphere-billboard' + (extraClass ? ' ' + extraClass : '');
+  inner.textContent = symbol;
+  styleAtomSphere(inner, symbol, sizeMultiplier);
+  anchor.appendChild(inner);
+  return anchor;
+}
+
 buildPicker('waterPicker', WATER_DATA, renderWater);
 buildPicker('flamePicker', FLAME_DATA, renderFlame);
 buildPicker('gasPicker', GAS_DATA, renderGas);
@@ -1529,7 +1575,7 @@ const MOLECULES = [
       {atom:'O', shape:'linear2', children:[{atom:'K'}]}]} },
   { comp:{C:12,H:22,O:11}, formula:"C₁₂H₂₂O₁₁", name:"Sucrose", fact:"Ordinary table sugar, made of a glucose unit and a fructose unit joined together." },
   { comp:{N:1,O:2}, formula:"NO₂", name:"Nitrogen Dioxide", fact:"A reddish-brown pollutant gas produced by vehicle engines and power plants.",
-    tree:{atom:'N', shape:{bent:134}, children:[{atom:'O', order:2},{atom:'O', order:2}]} },
+    tree:{atom:'N', shape:{bent:134}, lonePairs:1, radical:true, children:[{atom:'O', order:2},{atom:'O', order:2}]} },
   { comp:{N:2,O:1}, formula:"N₂O", name:"Nitrous Oxide", fact:"Known as laughing gas, used as a mild anesthetic and to propel whipped cream from cans.",
     tree:{atom:'N', shape:'linear2', children:[{atom:'N', order:2},{atom:'O', order:2}]} },
   { comp:{S:1,O:2}, formula:"SO₂", name:"Sulfur Dioxide", fact:"Released by volcanoes and burning fossil fuels, and a major contributor to acid rain.",
@@ -1557,7 +1603,7 @@ const MOLECULES = [
   { comp:{S:1,F:6}, formula:"SF₆", name:"Sulfur Hexafluoride", fact:"An excellent electrical insulator used in high-voltage equipment, though also a potent greenhouse gas.",
     tree:{atom:'S', shape:'octahedral', children:[{atom:'F'},{atom:'F'},{atom:'F'},{atom:'F'},{atom:'F'},{atom:'F'}]} },
   { comp:{Xe:1,F:2}, formula:"XeF₂", name:"Xenon Difluoride", fact:"One of the first proofs that noble gases can form real compounds — once thought impossible.",
-    tree:{atom:'Xe', shape:'linear2', children:[{atom:'F'},{atom:'F'}]} },
+    tree:{atom:'Xe', shape:'linear2', lonePairs:3, children:[{atom:'F'},{atom:'F'}]} },
   { comp:{Li:1,F:1}, formula:"LiF", name:"Lithium Fluoride", fact:"Used in specialized optics and ceramics for its transparency to ultraviolet light.",
     tree:{atom:'Li', children:[{atom:'F'}]} },
   { comp:{K:1,Br:1}, formula:"KBr", name:"Potassium Bromide", fact:"Once widely used as a sedative, now mainly used in lenses and windows for infrared instruments.",
@@ -1568,6 +1614,30 @@ const MOLECULES = [
       {atom:'O', shape:'linear2', children:[{atom:'Na'}]},
       {atom:'O', shape:'linear2', children:[{atom:'Na'}]},
       {atom:'O', order:2}]} },
+  { comp:{Mg:1,Cl:2}, formula:"MgCl₂", name:"Magnesium Chloride", fact:"Commonly used as a de-icing salt on roads and to make tofu curdle during production.",
+    tree:{atom:'Mg', children:[{atom:'Cl'},{atom:'Cl'}]} },
+  { comp:{Mg:1,F:2}, formula:"MgF₂", name:"Magnesium Fluoride", fact:"Highly transparent to UV and infrared light, so it's used in specialized camera and telescope lenses.",
+    tree:{atom:'Mg', children:[{atom:'F'},{atom:'F'}]} },
+  { comp:{Mg:1,Br:2}, formula:"MgBr₂", name:"Magnesium Bromide", fact:"Used in some pharmaceuticals and as a flame-retardant additive." },
+  { comp:{Ca:1,Br:2}, formula:"CaBr₂", name:"Calcium Bromide", fact:"Used in drilling fluids for oil and gas wells because it's extremely dense when dissolved." },
+  { comp:{Ba:1,Cl:2}, formula:"BaCl₂", name:"Barium Chloride", fact:"Used in fireworks for green colors and in water treatment to remove sulfates.",
+    tree:{atom:'Ba', children:[{atom:'Cl'},{atom:'Cl'}]} },
+  { comp:{Zn:1,Cl:2}, formula:"ZnCl₂", name:"Zinc Chloride", fact:"Used as a soldering flux to clean metal surfaces before joining them.",
+    tree:{atom:'Zn', children:[{atom:'Cl'},{atom:'Cl'}]} },
+  { comp:{Fe:1,Cl:2}, formula:"FeCl₂", name:"Iron(II) Chloride", fact:"Used in water treatment plants to help remove phosphates and control odor." },
+  { comp:{Fe:1,Cl:3}, formula:"FeCl₃", name:"Iron(III) Chloride", fact:"A common water-purification coagulant and etchant for copper circuit boards.",
+    tree:{atom:'Fe', shape:'trigonalPlanar', children:[{atom:'Cl'},{atom:'Cl'},{atom:'Cl'}]} },
+  { comp:{Cu:1,Cl:2}, formula:"CuCl₂", name:"Copper(II) Chloride", fact:"Gives a distinctive blue-green color and is used as a catalyst and wood preservative." },
+  { comp:{Ag:1,Cl:1}, formula:"AgCl", name:"Silver Chloride", fact:"Darkens on exposure to light, the same light-sensitivity once used in photographic film.",
+    tree:{atom:'Ag', children:[{atom:'Cl'}]} },
+  { comp:{K:1,Cl:1}, formula:"KCl", name:"Potassium Chloride", fact:"Used as a sodium-free salt substitute and as fertilizer for potassium-hungry crops.",
+    tree:{atom:'K', children:[{atom:'Cl'}]} },
+  { comp:{Na:1,Br:1}, formula:"NaBr", name:"Sodium Bromide", fact:"Once a common sedative before safer alternatives were developed; now used in some pool sanitizers.",
+    tree:{atom:'Na', children:[{atom:'Br'}]} },
+  { comp:{Na:1,F:1}, formula:"NaF", name:"Sodium Fluoride", fact:"Added to public water supplies and toothpaste to help prevent tooth decay.",
+    tree:{atom:'Na', children:[{atom:'F'}]} },
+  { comp:{Al:1,F:3}, formula:"AlF₃", name:"Aluminium Fluoride", fact:"Added during aluminium smelting to lower the melting point of the ore being processed.",
+    tree:{atom:'Al', shape:'trigonalPlanar', children:[{atom:'F'},{atom:'F'},{atom:'F'}]} },
 ];
 
 let molSlots = [];
@@ -1790,6 +1860,21 @@ function computeLonePairDirections(occupiedDirs, count){
   const antiDir = v3.len(sum) > 1e-4 ? v3.norm(v3.neg(sum)) : [0,0,-1];
   if(count === 1) return [antiDir];
 
+  if(count === 3){
+    // Trigonal-bipyramidal case (e.g. XeF2): 3 lone pairs sit equatorially,
+    // in the plane perpendicular to the (collinear) axial bonding direction.
+    const axis = occupiedDirs.length ? v3.norm(occupiedDirs[0]) : [1,0,0];
+    const ref = Math.abs(axis[1]) < 0.9 ? [0,1,0] : [1,0,0];
+    const perp1 = v3.norm(v3.cross(axis, ref));
+    const perp2 = v3.cross(axis, perp1);
+    const dirs = [];
+    for(let i=0;i<3;i++){
+      const ang = (120*i)*Math.PI/180;
+      dirs.push(v3.add(v3.scale(perp1, Math.cos(ang)), v3.scale(perp2, Math.sin(ang))));
+    }
+    return dirs;
+  }
+
   // count === 2: spread symmetrically around antiDir using a perpendicular axis
   let spreadAxis = null;
   if(occupiedDirs.length >= 2){
@@ -1840,7 +1925,7 @@ function layoutVseprTree(node, pos, incomingDir, bondLen, bonds, lonePairsOut){
     const occupied = dirs.slice();
     if(incomingDir) occupied.push(v3.neg(v3.norm(incomingDir)));
     const lpDirs = computeLonePairDirections(occupied, node.lonePairs);
-    lonePairsOut.push({pos, dirs: lpDirs});
+    lonePairsOut.push({pos, dirs: lpDirs, radical: !!node.radical});
   }
 
   kids.forEach((child,i)=>{
@@ -1886,11 +1971,19 @@ function renderBondStick(container, p1, p2, scale, order){
   });
 }
 
-function renderLonePair(container, atomPos, dir, scale){
+function renderLonePair(container, atomPos, dir, scale, radical){
   const distance = 0.6 * scale;
   const cx = atomPos[0]*scale + dir[0]*distance;
   const cy = atomPos[1]*scale + dir[1]*distance;
   const cz = atomPos[2]*scale + dir[2]*distance;
+
+  if(radical){
+    const dot = document.createElement('div');
+    dot.className = 'radical-dot';
+    dot.style.transform = `translate3d(${cx}px, ${cy}px, ${cz}px)`;
+    container.appendChild(dot);
+    return;
+  }
 
   let ref = [0,1,0];
   if(Math.abs(v3.dot(dir, ref)) > 0.9) ref = [1,0,0];
@@ -1927,7 +2020,7 @@ function buildPreciseMoleculeVisual(entry){
   bonds.forEach(([p1,p2,order])=>renderBondStick(mol, p1, p2, scale, order));
 
   lonePairs.forEach(lp=>{
-    lp.dirs.forEach(dir=>renderLonePair(mol, lp.pos, dir, scale));
+    lp.dirs.forEach(dir=>renderLonePair(mol, lp.pos, dir, scale, lp.radical));
   });
 
   atoms.forEach(a=>{
