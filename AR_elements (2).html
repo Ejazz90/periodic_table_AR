@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Elements VR/AR</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<style>
+  html, body { margin:0; height:100%; background:#05060a; font-family:'Segoe UI',Arial,sans-serif; }
+  #loadingNote{
+    position:fixed; left:0; right:0; bottom:14px; text-align:center;
+    color:#ffffff; font-size:12px; z-index:5; pointer-events:none;
+    letter-spacing:0.2px;
+  }
+  #xrDiagnostic{
+    position:fixed; top:0; left:0; right:0; z-index:6;
+    background:#c6664f; color:#fff; font-size:13px; text-align:center;
+    padding:10px 16px; line-height:1.4; display:none;
+  }
+  #xrDiagnostic.ok{ background:#3F8F79; }
+  a-scene{ height:100vh; }
+</style>
+</head>
+<body>
+
+<div id="xrDiagnostic"></div>
+<div id="loadingNote">Drag to look around · click a tile or button to explore · use the VR/AR button (bottom right)</div>
+
+<a-scene fog="type: exponential; color: #05060a; density: 0.05" renderer="alpha: true"
+         webxr="optionalFeatures: hit-test, local-floor, dom-overlay; overlayElement: #loadingNote;">
+
+  <a-assets></a-assets>
+
+  <!-- Environment -->
+  <a-sky id="sky" color="#05060a"></a-sky>
+  <a-entity light="type: ambient; color: #4a4f73; intensity: 0.7"></a-entity>
+  <a-entity light="type: directional; color: #ffffff; intensity: 0.6" position="2 5 3"></a-entity>
+  <a-entity light="type: point; color: #6f7fd6; intensity: 0.5" position="0 2 -3"></a-entity>
+
+  <!-- World content — scaled down and repositioned automatically when an AR session starts -->
+  <a-entity id="worldRoot" position="0 0 0" scale="1 1 1">
+
+    <a-entity id="floorDisc" geometry="primitive: circle; radius: 20; segments: 48"
+              rotation="-90 0 0" position="0 0 0"
+              material="color: #0a0c16; shader: flat; side: double"></a-entity>
+    <a-entity id="floorRing" geometry="primitive: ring; radiusInner: 5.9; radiusOuter: 6; segments-theta: 64"
+              rotation="-90 0 0" position="0 0.01 0"
+              material="color: #333a5c; shader: flat; side: double"></a-entity>
+
+
+    <!-- Central display stage — floats freely, no pedestal -->
+    <a-entity id="stageAnchor" position="0 1.5 -3"></a-entity>
+
+    <!-- Element information panel — moved farther left and enlarged -->
+    <a-entity id="infoPanel" position="0 6.25 -6.0" rotation="0 0 0">
+      <a-text id="infoTitle" value="Hydrogen" align="center" color="#ffffff" width="6.5"></a-text>
+      <a-text id="infoSub" value="Element 1 · nonmetal · Electron shells: 1" align="center" color="#ffffff" width="5.0" position="0 -0.45 0"></a-text>
+      <a-text id="infoFact" value="" align="center" color="#ffffff" width="4.3" position="0 -0.85 0" wrap-count="32"></a-text>
+    </a-entity>
+
+    <!-- Periodic table wall (built by JS, arced around the user, forward hemisphere) -->
+    <a-entity id="tableWall" position="0 0 0"></a-entity>
+
+    <!-- Molecule picker panel — placed on the opposite side of the viewer (turn around to see it) -->
+    <a-entity position="5.55 2.6 -2.9" rotation="0 -55 0">
+      <a-text value="MOLECULES" align="center" color="#ffffff" width="3.2" position="0 0.35 0"></a-text>
+      <a-entity id="moleculeList" position="0 0 0"></a-entity>
+    </a-entity>
+
+  </a-entity>
+
+  <!-- AR surface placement reticle — tracks detected floor/table surface, tap to place -->
+  <a-entity id="reticle"
+            geometry="primitive: ring; radiusInner: 0.07; radiusOuter: 0.09; segments-theta: 32"
+            material="color: #4E7A93; shader: flat; side: double; opacity: 0.9"
+            rotation="-90 0 0"
+            visible="false"
+            ar-hit-test>
+  </a-entity>
+
+  <!-- Camera + cursor for gaze/click/VR controller interaction -->
+  <a-entity id="rig" position="0 1.6 2" movement-controls>
+    <a-camera look-controls wasd-controls="enabled: true" position="0 0 0">
+      <a-cursor id="cursor"
+        raycaster="objects: .clickable; far: 20"
+        fuse="false"
+        material="color: #ffffff; shader: flat"
+        geometry="radiusInner: 0.006; radiusOuter: 0.009"
+        animation__click="property: scale; startEvents: click; from: 0.7 0.7 0.7; to: 1 1 1; dur: 150">
+      </a-cursor>
+    </a-camera>
+  </a-entity>
+  <a-entity laser-controls="hand: left" raycaster="objects: .clickable; far: 20"></a-entity>
+  <a-entity laser-controls="hand: right" raycaster="objects: .clickable; far: 20"></a-entity>
+
+</a-scene>
+
+<script>
+/* =========================================================
+   ELEMENT DATA (trimmed: symbol, name, atomic number, category,
+   electron shells, one-line fact) — same dataset as the main app
+   ========================================================= */
+const EL = [
+{n:1,s:"H",name:"Hydrogen",cat:"nonmetal",per:1,grp:1,shells:[1],fact:"Fuels stars through nuclear fusion."},
+{n:2,s:"He",name:"Helium",cat:"noble-gas",per:1,grp:18,shells:[2],fact:"Cannot be solidified by cooling alone."},
+{n:3,s:"Li",name:"Lithium",cat:"alkali-metal",per:2,grp:1,shells:[2,1],fact:"Powers rechargeable batteries."},
+{n:4,s:"Be",name:"Beryllium",cat:"alkaline-earth",per:2,grp:2,shells:[2,2],fact:"Nearly transparent to X-rays."},
+{n:5,s:"B",name:"Boron",cat:"metalloid",per:2,grp:13,shells:[2,3],fact:"Strengthens borosilicate glass."},
+{n:6,s:"C",name:"Carbon",cat:"nonmetal",per:2,grp:14,shells:[2,4],fact:"The backbone of all known life."},
+{n:7,s:"N",name:"Nitrogen",cat:"nonmetal",per:2,grp:15,shells:[2,5],fact:"Makes up 78% of the atmosphere."},
+{n:8,s:"O",name:"Oxygen",cat:"nonmetal",per:2,grp:16,shells:[2,6],fact:"Needed by nearly all animal life."},
+{n:9,s:"F",name:"Fluorine",cat:"halogen",per:2,grp:17,shells:[2,7],fact:"The most reactive element."},
+{n:10,s:"Ne",name:"Neon",cat:"noble-gas",per:2,grp:18,shells:[2,8],fact:"Glows orange-red in signage."},
+{n:11,s:"Na",name:"Sodium",cat:"alkali-metal",per:3,grp:1,shells:[2,8,1],fact:"Reacts violently with water."},
+{n:12,s:"Mg",name:"Magnesium",cat:"alkaline-earth",per:3,grp:2,shells:[2,8,2],fact:"Core of the chlorophyll molecule."},
+{n:13,s:"Al",name:"Aluminium",cat:"post-transition-metal",per:3,grp:13,shells:[2,8,3],fact:"Once pricier than gold."},
+{n:14,s:"Si",name:"Silicon",cat:"metalloid",per:3,grp:14,shells:[2,8,4],fact:"The backbone of computer chips."},
+{n:15,s:"P",name:"Phosphorus",cat:"nonmetal",per:3,grp:15,shells:[2,8,5],fact:"Vital to DNA and bone."},
+{n:16,s:"S",name:"Sulfur",cat:"nonmetal",per:3,grp:16,shells:[2,8,6],fact:"Historically called brimstone."},
+{n:17,s:"Cl",name:"Chlorine",cat:"halogen",per:3,grp:17,shells:[2,8,7],fact:"Disinfects drinking water."},
+{n:18,s:"Ar",name:"Argon",cat:"noble-gas",per:3,grp:18,shells:[2,8,8],fact:"Shields metal during welding."},
+{n:19,s:"K",name:"Potassium",cat:"alkali-metal",per:4,grp:1,shells:[2,8,8,1],fact:"Controls every heartbeat."},
+{n:20,s:"Ca",name:"Calcium",cat:"alkaline-earth",per:4,grp:2,shells:[2,8,8,2],fact:"Builds bones and teeth."},
+{n:21,s:"Sc",name:"Scandium",cat:"transition-metal",per:4,grp:3,shells:[2,8,9,2],fact:"Strengthens aluminium alloys."},
+{n:22,s:"Ti",name:"Titanium",cat:"transition-metal",per:4,grp:4,shells:[2,8,10,2],fact:"As strong as steel, 45% lighter."},
+{n:23,s:"V",name:"Vanadium",cat:"transition-metal",per:4,grp:5,shells:[2,8,11,2],fact:"Adds shock resistance to steel."},
+{n:24,s:"Cr",name:"Chromium",cat:"transition-metal",per:4,grp:6,shells:[2,8,13,1],fact:"Named for its vivid colors."},
+{n:25,s:"Mn",name:"Manganese",cat:"transition-metal",per:4,grp:7,shells:[2,8,13,2],fact:"Removes impurities in steelmaking."},
+{n:26,s:"Fe",name:"Iron",cat:"transition-metal",per:4,grp:8,shells:[2,8,14,2],fact:"Forms Earth's solid core."},
+{n:27,s:"Co",name:"Cobalt",cat:"transition-metal",per:4,grp:9,shells:[2,8,15,2],fact:"Key to lithium-ion battery cathodes."},
+{n:28,s:"Ni",name:"Nickel",cat:"transition-metal",per:4,grp:10,shells:[2,8,16,2],fact:"Resists corrosion exceptionally well."},
+{n:29,s:"Cu",name:"Copper",cat:"transition-metal",per:4,grp:11,shells:[2,8,18,1],fact:"The standard for electrical wiring."},
+{n:30,s:"Zn",name:"Zinc",cat:"transition-metal",per:4,grp:12,shells:[2,8,18,2],fact:"Galvanizes steel against rust."},
+{n:31,s:"Ga",name:"Gallium",cat:"post-transition-metal",per:4,grp:13,shells:[2,8,18,3],fact:"Melts in the palm of your hand."},
+{n:32,s:"Ge",name:"Germanium",cat:"metalloid",per:4,grp:14,shells:[2,8,18,4],fact:"Crucial to early transistors."},
+{n:33,s:"As",name:"Arsenic",cat:"metalloid",per:4,grp:15,shells:[2,8,18,5],fact:"Notorious throughout history as a poison."},
+{n:34,s:"Se",name:"Selenium",cat:"nonmetal",per:4,grp:16,shells:[2,8,18,6],fact:"Conductivity changes with light."},
+{n:35,s:"Br",name:"Bromine",cat:"halogen",per:4,grp:17,shells:[2,8,18,7],fact:"One of two liquid elements at room temp."},
+{n:36,s:"Kr",name:"Krypton",cat:"noble-gas",per:4,grp:18,shells:[2,8,18,8],fact:"Used in efficient fluorescent bulbs."},
+{n:37,s:"Rb",name:"Rubidium",cat:"alkali-metal",per:5,grp:1,shells:[2,8,18,8,1],fact:"Ignites spontaneously in air."},
+{n:38,s:"Sr",name:"Strontium",cat:"alkaline-earth",per:5,grp:2,shells:[2,8,18,8,2],fact:"Burns brilliant red in flares."},
+{n:39,s:"Y",name:"Yttrium",cat:"transition-metal",per:5,grp:3,shells:[2,8,18,9,2],fact:"Named after a Swedish village."},
+{n:40,s:"Zr",name:"Zirconium",cat:"transition-metal",per:5,grp:4,shells:[2,8,18,10,2],fact:"Clads nuclear fuel rods."},
+{n:41,s:"Nb",name:"Niobium",cat:"transition-metal",per:5,grp:5,shells:[2,8,18,12,1],fact:"Superconducts in MRI magnets."},
+{n:42,s:"Mo",name:"Molybdenum",cat:"transition-metal",per:5,grp:6,shells:[2,8,18,13,1],fact:"One of the highest melting points."},
+{n:43,s:"Tc",name:"Technetium",cat:"transition-metal",per:5,grp:7,shells:[2,8,18,13,2],fact:"First artificially made element."},
+{n:44,s:"Ru",name:"Ruthenium",cat:"transition-metal",per:5,grp:8,shells:[2,8,18,15,1],fact:"Hardens platinum jewelry alloys."},
+{n:45,s:"Rh",name:"Rhodium",cat:"transition-metal",per:5,grp:9,shells:[2,8,18,16,1],fact:"Key catalyst in car exhausts."},
+{n:46,s:"Pd",name:"Palladium",cat:"transition-metal",per:5,grp:10,shells:[2,8,18,18],fact:"Absorbs 900x its volume in hydrogen."},
+{n:47,s:"Ag",name:"Silver",cat:"transition-metal",per:5,grp:11,shells:[2,8,18,18,1],fact:"Highest electrical conductivity."},
+{n:48,s:"Cd",name:"Cadmium",cat:"transition-metal",per:5,grp:12,shells:[2,8,18,18,2],fact:"Once used in NiCd batteries."},
+{n:49,s:"In",name:"Indium",cat:"post-transition-metal",per:5,grp:13,shells:[2,8,18,18,3],fact:"Coats every touchscreen display."},
+{n:50,s:"Sn",name:"Tin",cat:"post-transition-metal",per:5,grp:14,shells:[2,8,18,18,4],fact:"Alloyed with copper to make bronze."},
+{n:51,s:"Sb",name:"Antimony",cat:"metalloid",per:5,grp:15,shells:[2,8,18,18,5],fact:"Used as a flame retardant."},
+{n:52,s:"Te",name:"Tellurium",cat:"metalloid",per:5,grp:16,shells:[2,8,18,18,6],fact:"Gives handlers garlic breath."},
+{n:53,s:"I",name:"Iodine",cat:"halogen",per:5,grp:17,shells:[2,8,18,18,7],fact:"Essential for thyroid hormones."},
+{n:54,s:"Xe",name:"Xenon",cat:"noble-gas",per:5,grp:18,shells:[2,8,18,18,8],fact:"Powers spacecraft ion thrusters."},
+{n:55,s:"Cs",name:"Caesium",cat:"alkali-metal",per:6,grp:1,shells:[2,8,18,18,8,1],fact:"Defines the second in atomic clocks."},
+{n:56,s:"Ba",name:"Barium",cat:"alkaline-earth",per:6,grp:2,shells:[2,8,18,18,8,2],fact:"Highlights the gut in X-rays."},
+{n:57,s:"La",name:"Lanthanum",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,18,9,2],fact:"Names the whole lanthanide series."},
+{n:58,s:"Ce",name:"Cerium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,19,9,2],fact:"The most abundant rare earth."},
+{n:59,s:"Pr",name:"Praseodymium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,21,8,2],fact:"Colors glass yellow-green."},
+{n:60,s:"Nd",name:"Neodymium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,22,8,2],fact:"Makes the strongest magnets."},
+{n:61,s:"Pm",name:"Promethium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,23,8,2],fact:"No stable isotopes exist."},
+{n:62,s:"Sm",name:"Samarium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,24,8,2],fact:"Keeps magnetism at high heat."},
+{n:63,s:"Eu",name:"Europium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,25,8,2],fact:"Marks euro banknotes for security."},
+{n:64,s:"Gd",name:"Gadolinium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,25,9,2],fact:"Sharpens MRI contrast scans."},
+{n:65,s:"Tb",name:"Terbium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,27,8,2],fact:"Glows green in fluorescent lamps."},
+{n:66,s:"Dy",name:"Dysprosium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,28,8,2],fact:"Resists demagnetizing at heat."},
+{n:67,s:"Ho",name:"Holmium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,29,8,2],fact:"Highest magnetic strength known."},
+{n:68,s:"Er",name:"Erbium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,30,8,2],fact:"Boosts signals in fiber optics."},
+{n:69,s:"Tm",name:"Thulium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,31,8,2],fact:"Rarest naturally occurring lanthanide."},
+{n:70,s:"Yb",name:"Ytterbium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,32,8,2],fact:"Powers ultra-precise atomic clocks."},
+{n:71,s:"Lu",name:"Lutetium",cat:"lanthanide",per:6,grp:3,shells:[2,8,18,32,9,2],fact:"Used in PET scan detectors."},
+{n:72,s:"Hf",name:"Hafnium",cat:"transition-metal",per:6,grp:4,shells:[2,8,18,32,10,2],fact:"Absorbs neutrons in reactors."},
+{n:73,s:"Ta",name:"Tantalum",cat:"transition-metal",per:6,grp:5,shells:[2,8,18,32,11,2],fact:"Found in smartphone capacitors."},
+{n:74,s:"W",name:"Tungsten",cat:"transition-metal",per:6,grp:6,shells:[2,8,18,32,12,2],fact:"Highest melting point of any metal."},
+{n:75,s:"Re",name:"Rhenium",cat:"transition-metal",per:6,grp:7,shells:[2,8,18,32,13,2],fact:"Strengthens jet turbine blades."},
+{n:76,s:"Os",name:"Osmium",cat:"transition-metal",per:6,grp:8,shells:[2,8,18,32,14,2],fact:"Densest naturally occurring element."},
+{n:77,s:"Ir",name:"Iridium",cat:"transition-metal",per:6,grp:9,shells:[2,8,18,32,15,2],fact:"Marks the dinosaur extinction layer."},
+{n:78,s:"Pt",name:"Platinum",cat:"transition-metal",per:6,grp:10,shells:[2,8,18,32,17,1],fact:"Denser and rarer than gold."},
+{n:79,s:"Au",name:"Gold",cat:"transition-metal",per:6,grp:11,shells:[2,8,18,32,18,1],fact:"Hammered thin enough to see through."},
+{n:80,s:"Hg",name:"Mercury",cat:"transition-metal",per:6,grp:12,shells:[2,8,18,32,18,2],fact:"The only liquid metal at room temp."},
+{n:81,s:"Tl",name:"Thallium",cat:"post-transition-metal",per:6,grp:13,shells:[2,8,18,32,18,3],fact:"Once used in rat poison, now banned."},
+{n:82,s:"Pb",name:"Lead",cat:"post-transition-metal",per:6,grp:14,shells:[2,8,18,32,18,4],fact:"Shields against radiation."},
+{n:83,s:"Bi",name:"Bismuth",cat:"post-transition-metal",per:6,grp:15,shells:[2,8,18,32,18,5],fact:"Forms colorful stair-step crystals."},
+{n:84,s:"Po",name:"Polonium",cat:"post-transition-metal",per:6,grp:16,shells:[2,8,18,32,18,6],fact:"Named after Marie Curie's homeland."},
+{n:85,s:"At",name:"Astatine",cat:"halogen",per:6,grp:17,shells:[2,8,18,32,18,7],fact:"Only about a gram exists on Earth."},
+{n:86,s:"Rn",name:"Radon",cat:"noble-gas",per:6,grp:18,shells:[2,8,18,32,18,8],fact:"Seeps from soil; tested for in homes."},
+{n:87,s:"Fr",name:"Francium",cat:"alkali-metal",per:7,grp:1,shells:[2,8,18,32,18,8,1],fact:"Barely exists on Earth at any time."},
+{n:88,s:"Ra",name:"Radium",cat:"alkaline-earth",per:7,grp:2,shells:[2,8,18,32,18,8,2],fact:"Once painted onto glowing watch dials."},
+{n:89,s:"Ac",name:"Actinium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,18,9,2],fact:"Glows blue in the dark."},
+{n:90,s:"Th",name:"Thorium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,18,10,2],fact:"Explored as a safer nuclear fuel."},
+{n:91,s:"Pa",name:"Protactinium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,20,9,2],fact:"Exceptionally rare and toxic."},
+{n:92,s:"U",name:"Uranium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,21,9,2],fact:"Fuels nuclear power plants."},
+{n:93,s:"Np",name:"Neptunium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,22,9,2],fact:"First transuranium element made."},
+{n:94,s:"Pu",name:"Plutonium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,24,8,2],fact:"Powered the Voyager probes."},
+{n:95,s:"Am",name:"Americium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,25,8,2],fact:"Found inside smoke detectors."},
+{n:96,s:"Cm",name:"Curium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,25,9,2],fact:"Glows purple from radioactivity."},
+{n:97,s:"Bk",name:"Berkelium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,27,8,2],fact:"Named after Berkeley, California."},
+{n:98,s:"Cf",name:"Californium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,28,8,2],fact:"Detects explosives and gold ore."},
+{n:99,s:"Es",name:"Einsteinium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,29,8,2],fact:"Found in the first H-bomb debris."},
+{n:100,s:"Fm",name:"Fermium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,30,8,2],fact:"Named after physicist Enrico Fermi."},
+{n:101,s:"Md",name:"Mendelevium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,31,8,2],fact:"Honors the periodic table's creator."},
+{n:102,s:"No",name:"Nobelium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,32,8,2],fact:"Exists for only minutes at a time."},
+{n:103,s:"Lr",name:"Lawrencium",cat:"actinide",per:7,grp:3,shells:[2,8,18,32,32,8,3],fact:"Final element of the actinide series."},
+{n:104,s:"Rf",name:"Rutherfordium",cat:"transition-metal",per:7,grp:4,shells:[2,8,18,32,32,10,2],fact:"Made a few atoms at a time."},
+{n:105,s:"Db",name:"Dubnium",cat:"transition-metal",per:7,grp:5,shells:[2,8,18,32,32,11,2],fact:"Named after Dubna, Russia."},
+{n:106,s:"Sg",name:"Seaborgium",cat:"transition-metal",per:7,grp:6,shells:[2,8,18,32,32,12,2],fact:"Named after a living chemist."},
+{n:107,s:"Bh",name:"Bohrium",cat:"transition-metal",per:7,grp:7,shells:[2,8,18,32,32,13,2],fact:"Honors physicist Niels Bohr."},
+{n:108,s:"Hs",name:"Hassium",cat:"transition-metal",per:7,grp:8,shells:[2,8,18,32,32,14,2],fact:"Named after the state of Hesse."},
+{n:109,s:"Mt",name:"Meitnerium",cat:"unknown",per:7,grp:9,shells:[2,8,18,32,32,15,2],fact:"Honors physicist Lise Meitner."},
+{n:110,s:"Ds",name:"Darmstadtium",cat:"unknown",per:7,grp:10,shells:[2,8,18,32,32,16,2],fact:"Named after Darmstadt, Germany."},
+{n:111,s:"Rg",name:"Roentgenium",cat:"unknown",per:7,grp:11,shells:[2,8,18,32,32,17,2],fact:"Honors the discoverer of X-rays."},
+{n:112,s:"Cn",name:"Copernicium",cat:"transition-metal",per:7,grp:12,shells:[2,8,18,32,32,18,2],fact:"Named after Nicolaus Copernicus."},
+{n:113,s:"Nh",name:"Nihonium",cat:"post-transition-metal",per:7,grp:13,shells:[2,8,18,32,32,18,3],fact:"First element discovered in Asia."},
+{n:114,s:"Fl",name:"Flerovium",cat:"post-transition-metal",per:7,grp:14,shells:[2,8,18,32,32,18,4],fact:"Sits in a theorized stability island."},
+{n:115,s:"Mc",name:"Moscovium",cat:"post-transition-metal",per:7,grp:15,shells:[2,8,18,32,32,18,5],fact:"Named after the Moscow region."},
+{n:116,s:"Lv",name:"Livermorium",cat:"post-transition-metal",per:7,grp:16,shells:[2,8,18,32,32,18,6],fact:"Named after Lawrence Livermore Lab."},
+{n:117,s:"Ts",name:"Tennessine",cat:"halogen",per:7,grp:17,shells:[2,8,18,32,32,18,7],fact:"Named after the state of Tennessee."},
+{n:118,s:"Og",name:"Oganesson",cat:"noble-gas",per:7,grp:18,shells:[2,8,18,32,32,18,8],fact:"Named after a living physicist."},
+];
+
+const CATHEX = {
+  "alkali-metal":'#C6664F', "alkaline-earth":'#D19A3D', "transition-metal":'#4E7A93', "post-transition-metal":'#748A57',
+  "metalloid":'#AD8A4A', "nonmetal":'#3F8F79', "halogen":'#8C5F91', "noble-gas":'#5C6BA6',
+  "lanthanide":'#B5637E', "actinide":'#A24A32', "unknown":'#8A8A7E'
+};
+
+function byName(s){ return EL.find(e=>e.s===s); }
+
+// Grid placement (row/col) — same layout as the main periodic table
+const POS = {};
+EL.forEach(e=>{
+  if(e.n>=58 && e.n<=71){ POS[e.n] = {row:9, col:e.n-58+4}; }
+  else if(e.n>=90 && e.n<=103){ POS[e.n] = {row:10, col:e.n-90+4}; }
+  else { POS[e.n] = {row:e.per, col:e.grp}; }
+});
+
+/* =========================================================
+   VSEPR 3D GEOMETRY ENGINE (same math as the main app)
+   ========================================================= */
+const v3 = {
+  add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],
+  scale:(a,s)=>[a[0]*s,a[1]*s,a[2]*s],
+  neg:(a)=>[-a[0],-a[1],-a[2]],
+  len:(a)=>Math.sqrt(a[0]*a[0]+a[1]*a[1]+a[2]*a[2]),
+  norm:(a)=>{ const l=v3.len(a)||1; return [a[0]/l,a[1]/l,a[2]/l]; },
+  dot:(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],
+  cross:(a,b)=>[a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]],
+};
+function rotateAroundAxis(vec, axis, angle){
+  const ax=v3.norm(axis), cosA=Math.cos(angle), sinA=Math.sin(angle);
+  const cr=v3.cross(ax,vec), dt=v3.dot(ax,vec);
+  return [vec[0]*cosA+cr[0]*sinA+ax[0]*dt*(1-cosA), vec[1]*cosA+cr[1]*sinA+ax[1]*dt*(1-cosA), vec[2]*cosA+cr[2]*sinA+ax[2]*dt*(1-cosA)];
+}
+function rotateSetToAlign(vectors, fromVec, toVec){
+  const from=v3.norm(fromVec), to=v3.norm(toVec);
+  const dot=Math.max(-1,Math.min(1,v3.dot(from,to)));
+  if(dot>0.999999) return vectors.map(v=>v.slice());
+  if(dot<-0.999999){
+    let axis=v3.cross(from,[1,0,0]);
+    if(v3.len(axis)<1e-6) axis=v3.cross(from,[0,1,0]);
+    axis=v3.norm(axis);
+    return vectors.map(v=>rotateAroundAxis(v,axis,Math.PI));
+  }
+  const axis=v3.norm(v3.cross(from,to)), angle=Math.acos(dot);
+  return vectors.map(v=>rotateAroundAxis(v,axis,angle));
+}
+const VSEPR_SHAPES = {
+  linear2: ()=>[[-1,0,0],[1,0,0]],
+  bent: (deg)=>{ const h=(deg*Math.PI/180)/2; return [[Math.cos(h),Math.sin(h),0],[Math.cos(h),-Math.sin(h),0]]; },
+  trigonalPlanar: ()=>[0,120,240].map(a=>{const r=a*Math.PI/180; return [Math.cos(r),Math.sin(r),0];}),
+  pyramidal: ()=>{ const theta=112*Math.PI/180; return [0,120,240].map(a=>{const phi=a*Math.PI/180; return [Math.sin(theta)*Math.cos(phi),Math.sin(theta)*Math.sin(phi),Math.cos(theta)];}); },
+  tetrahedral: ()=>{ const n=Math.sqrt(3); return [[1,1,1],[1,-1,-1],[-1,1,-1],[-1,-1,1]].map(v=>[v[0]/n,v[1]/n,v[2]/n]); },
+  octahedral: ()=>[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]],
+};
+function resolveShapeVectors(shape){
+  if(!shape) return null;
+  if(typeof shape==='string') return VSEPR_SHAPES[shape] ? VSEPR_SHAPES[shape]() : null;
+  if(shape.bent!==undefined) return VSEPR_SHAPES.bent(shape.bent);
+  return null;
+}
+function layoutVseprTree(node, pos, incomingDir, bondLen){
+  const atoms=[{symbol:node.atom, pos}];
+  const kids=node.children||[];
+  if(kids.length){
+    let vectors=resolveShapeVectors(node.shape);
+    if(!vectors){
+      const total=kids.length+(incomingDir?1:0);
+      vectors=[];
+      for(let i=0;i<total;i++){ const a=(360/total)*i*Math.PI/180; vectors.push([Math.cos(a),Math.sin(a),0]); }
+    }
+    let dirs;
+    if(incomingDir){
+      const target=v3.neg(v3.norm(incomingDir));
+      dirs=rotateSetToAlign(vectors, vectors[0], target).slice(1);
+    } else {
+      dirs=vectors.slice(0, kids.length);
+    }
+    if(node.twist && incomingDir){
+      const axis=v3.norm(incomingDir);
+      dirs=dirs.map(d=>rotateAroundAxis(d, axis, node.twist*Math.PI/180));
+    }
+    kids.forEach((child,i)=>{
+      const dir=dirs[i]||[1,0,0];
+      const childPos=v3.add(pos, v3.scale(dir, bondLen));
+      atoms.push(...layoutVseprTree(child, childPos, dir, bondLen));
+    });
+  }
+  return atoms;
+}
+
+/* =========================================================
+   CURATED MOLECULE LIBRARY (subset spanning different VSEPR shapes)
+   ========================================================= */
+const MOLECULES_VR = [
+  { formula:"H₂O", name:"Water", fact:"Bent, 104.5°",
+    tree:{atom:'O', shape:{bent:104.5}, children:[{atom:'H'},{atom:'H'}]} },
+  { formula:"CO₂", name:"Carbon Dioxide", fact:"Linear, 180°",
+    tree:{atom:'C', shape:'linear2', children:[{atom:'O'},{atom:'O'}]} },
+  { formula:"NH₃", name:"Ammonia", fact:"Trigonal pyramidal",
+    tree:{atom:'N', shape:'pyramidal', children:[{atom:'H'},{atom:'H'},{atom:'H'}]} },
+  { formula:"CH₄", name:"Methane", fact:"Tetrahedral, 109.5°",
+    tree:{atom:'C', shape:'tetrahedral', children:[{atom:'H'},{atom:'H'},{atom:'H'},{atom:'H'}]} },
+  { formula:"SO₃", name:"Sulfur Trioxide", fact:"Trigonal planar",
+    tree:{atom:'S', shape:'trigonalPlanar', children:[{atom:'O'},{atom:'O'},{atom:'O'}]} },
+  { formula:"SF₆", name:"Sulfur Hexafluoride", fact:"Octahedral",
+    tree:{atom:'S', shape:'octahedral', children:[{atom:'F'},{atom:'F'},{atom:'F'},{atom:'F'},{atom:'F'},{atom:'F'}]} },
+  { formula:"XeF₂", name:"Xenon Difluoride", fact:"Linear noble-gas compound",
+    tree:{atom:'Xe', shape:'linear2', children:[{atom:'F'},{atom:'F'}]} },
+  { formula:"H₂O₂", name:"Hydrogen Peroxide", fact:"Bent, twisted chain",
+    tree:{atom:'O', shape:{bent:98}, children:[{atom:'H'}, {atom:'O', shape:{bent:98}, twist:95, children:[{atom:'H'}]}]} },
+  { formula:"C₂H₄", name:"Ethylene", fact:"Planar double bond",
+    tree:{atom:'C', shape:'trigonalPlanar', children:[{atom:'H'},{atom:'H'}, {atom:'C', shape:'trigonalPlanar', twist:0, children:[{atom:'H'},{atom:'H'}]}]} },
+  { formula:"C₂H₆", name:"Ethane", fact:"Staggered tetrahedral chain",
+    tree:{atom:'C', shape:'tetrahedral', children:[{atom:'H'},{atom:'H'},{atom:'H'}, {atom:'C', shape:'tetrahedral', twist:60, children:[{atom:'H'},{atom:'H'},{atom:'H'}]}]} },
+  { formula:"C₂H₂", name:"Acetylene", fact:"Fully linear chain",
+    tree:{atom:'C', shape:'linear2', children:[{atom:'H'}, {atom:'C', shape:'linear2', children:[{atom:'H'}]}]} },
+  { formula:"H₂S", name:"Hydrogen Sulfide", fact:"Bent, 92°",
+    tree:{atom:'S', shape:{bent:92}, children:[{atom:'H'},{atom:'H'}]} },
+  { formula:"NO₂", name:"Nitrogen Dioxide", fact:"Bent, 134°",
+    tree:{atom:'N', shape:{bent:134}, children:[{atom:'O'},{atom:'O'}]} },
+  { formula:"O₂", name:"Oxygen Gas", fact:"Simple diatomic",
+    tree:{atom:'O', children:[{atom:'O'}]} },
+];
+
+/* =========================================================
+   PER-ELEMENT SPHERE COLOR/SIZE
+   ========================================================= */
+const ATOM_RADIUS = { H:0.13, He:0.14, Li:0.19, C:0.17, N:0.16, O:0.15, F:0.14, Ne:0.15,
+  Na:0.21, Mg:0.19, Al:0.18, Si:0.18, P:0.18, S:0.18, Cl:0.17, Ar:0.18,
+  K:0.24, Ca:0.23, Ti:0.20, Fe:0.19, Cu:0.19, Zn:0.19, Ag:0.21, Sn:0.21, I:0.20,
+  Cs:0.27, Ba:0.24, Au:0.20, Pb:0.22, Xe:0.20, Br:0.18 };
+function radiusFor(sym){ return ATOM_RADIUS[sym] || 0.18; }
+function colorFor(sym){ const info=byName(sym); return info ? CATHEX[info.cat] : CATHEX.unknown; }
+
+/* =========================================================
+   BUILD PERIODIC TABLE WALL (arc around the user)
+   ========================================================= */
+const wall = document.getElementById('tableWall');
+const R = 6.2;
+const angleStep = 5.4 * Math.PI/180;
+const centerCol = 9.5;
+const baseY = 4.95;
+const rowSpacing = 0.42;
+
+EL.forEach(e=>{
+  const pos = POS[e.n];
+  const angle = (pos.col - centerCol) * angleStep;
+  const x = R * Math.sin(angle);
+  const z = -R * Math.cos(angle);
+  const y = baseY - (pos.row - 1) * rowSpacing - (pos.row >= 9 ? 0.25 : 0);
+
+  const tile = document.createElement('a-entity');
+  tile.setAttribute('geometry', 'primitive: box; width: 0.38; height: 0.38; depth: 0.06');
+  tile.setAttribute('material', `color: ${CATHEX[e.cat]}; metalness: 0.15; roughness: 0.55`);
+  tile.setAttribute('position', `${x} ${y} ${z}`);
+  tile.setAttribute('rotation', `0 ${-angle*180/Math.PI} 0`);
+  tile.classList.add('clickable');
+  tile.setAttribute('data-symbol', e.s);
+
+  const label = document.createElement('a-text');
+  label.setAttribute('value', e.s);
+  label.setAttribute('align', 'center');
+  label.setAttribute('color', '#ffffff');
+  label.setAttribute('width', '4.0');
+  label.setAttribute('position', '0 0 0.04');
+  tile.appendChild(label);
+
+  tile.addEventListener('click', ()=> showAtom(e.s));
+  wall.appendChild(tile);
+});
+
+/* =========================================================
+   BUILD MOLECULE PICKER LIST
+   ========================================================= */
+const molList = document.getElementById('moleculeList');
+MOLECULES_VR.forEach((m,i)=>{
+  const btn = document.createElement('a-entity');
+  btn.setAttribute('geometry', 'primitive: plane; width: 1.8; height: 0.32');
+  btn.setAttribute('material', 'color: #14182a; opacity: 0.92; side: double');
+  btn.setAttribute('position', `0 ${-i*0.42} 0`);
+  btn.classList.add('clickable');
+
+  const label = document.createElement('a-text');
+  label.setAttribute('value', `${m.formula}  ·  ${m.name}`);
+  label.setAttribute('align', 'center');
+  label.setAttribute('color', '#ffffff');
+  label.setAttribute('width', '2.6');
+  label.setAttribute('position', '0 0 0.01');
+  btn.appendChild(label);
+
+  btn.addEventListener('mouseenter', ()=> btn.setAttribute('material', 'color: #333a5c; opacity: 0.95; side: double'));
+  btn.addEventListener('mouseleave', ()=> btn.setAttribute('material', 'color: #14182a; opacity: 0.92; side: double'));
+  btn.addEventListener('click', ()=> showMolecule(m));
+  molList.appendChild(btn);
+});
+
+/* =========================================================
+   STAGE RENDERING: atom model & molecule model
+   ========================================================= */
+const stage = document.getElementById('stageAnchor');
+const infoTitle = document.getElementById('infoTitle');
+const infoSub = document.getElementById('infoSub');
+const infoFact = document.getElementById('infoFact');
+
+function clearStage(){ while(stage.firstChild) stage.removeChild(stage.firstChild); }
+
+function makeSphere(symbol, sizeMul){
+  const s = document.createElement('a-sphere');
+  s.setAttribute('radius', radiusFor(symbol) * (sizeMul||1));
+  s.setAttribute('color', colorFor(symbol));
+  s.setAttribute('metalness', 0.2);
+  s.setAttribute('roughness', 0.45);
+  const label = document.createElement('a-text');
+  label.setAttribute('value', symbol);
+  label.setAttribute('align', 'center');
+  label.setAttribute('color', '#ffffff');
+  label.setAttribute('width', '2.2');
+  label.setAttribute('side', 'double');
+  label.setAttribute('position', `0 0 ${radiusFor(symbol)*(sizeMul||1) + 0.01}`);
+  s.appendChild(label);
+  return s;
+}
+
+function showAtom(symbol){
+  const e = byName(symbol);
+  if(!e) return;
+  clearStage();
+
+  const nucleus = makeSphere(symbol, 1.4);
+  stage.appendChild(nucleus);
+
+  const shells = e.shells;
+  const maxR = 1.3, minR = 0.35;
+  const spacing = (maxR - minR) / Math.max(1, shells.length);
+
+  shells.forEach((count, i)=>{
+    const radius = minR + spacing * (i+1);
+    const tilt = document.createElement('a-entity');
+    tilt.setAttribute('rotation', `90 0 ${i*20}`);
+    stage.appendChild(tilt);
+
+    const spin = document.createElement('a-entity');
+    spin.setAttribute('animation', `property: rotation; to: 0 ${i%2===0?360:-360} 0; loop: true; dur: ${4500 + i*1800}; easing: linear`);
+    tilt.appendChild(spin);
+
+    for(let j=0;j<count;j++){
+      const angle = (360/count)*j*Math.PI/180;
+      const electron = document.createElement('a-sphere');
+      electron.setAttribute('radius', 0.045);
+      electron.setAttribute('color', '#ffffff');
+      electron.setAttribute('position', `${Math.cos(angle)*radius} 0 ${Math.sin(angle)*radius}`);
+      spin.appendChild(electron);
+    }
+
+    const ring = document.createElement('a-torus');
+    ring.setAttribute('radius', radius);
+    ring.setAttribute('radius-tubular', 0.003);
+    ring.setAttribute('segments-tubular', 48);
+    ring.setAttribute('color', '#4E7A93');
+    ring.setAttribute('opacity', 0.35);
+    tilt.appendChild(ring);
+  });
+
+  infoTitle.setAttribute('value', e.name);
+  infoSub.setAttribute('value', `Element ${e.n} · ${e.cat.replace('-',' ')} · shells: ${shells.join(', ')}`);
+  infoFact.setAttribute('value', e.fact);
+}
+
+function showMolecule(m){
+  clearStage();
+  const bondLen = 0.55;
+  const atoms = layoutVseprTree(m.tree, [0,0,0], null, bondLen);
+
+  atoms.forEach(a=>{
+    const sphere = makeSphere(a.symbol, 1);
+    sphere.setAttribute('position', `${a.pos[0]} ${a.pos[1]} ${a.pos[2]}`);
+    stage.appendChild(sphere);
+  });
+
+  // slow tumble of the whole molecule
+  stage.setAttribute('animation__tumble', 'property: rotation; to: 0 360 0; loop: true; dur: 14000; easing: linear');
+
+  infoTitle.setAttribute('value', `${m.formula} — ${m.name}`);
+  infoSub.setAttribute('value', m.fact);
+  infoFact.setAttribute('value', '');
+}
+
+// remove tumble animation when switching to an atom (atom has its own per-shell spin instead)
+const origShowAtom = showAtom;
+showAtom = function(symbol){
+  stage.removeAttribute('animation__tumble');
+  origShowAtom(symbol);
+};
+
+// Default view on load
+showAtom('H');
+
+/* =========================================================
+   AR MODE — when an immersive-ar session starts, shrink the
+   whole scene into a compact "tabletop hologram" and switch
+   off the sky/floor so the camera feed shows through.
+   A hit-test reticle tracks real surfaces; tapping the screen
+   places the model right there. Restores full room-scale for
+   VR or desktop.
+   ========================================================= */
+const sceneEl = document.querySelector('a-scene');
+const worldRoot = document.getElementById('worldRoot');
+const sky = document.getElementById('sky');
+const floorDisc = document.getElementById('floorDisc');
+const floorRing = document.getElementById('floorRing');
+const noteEl = document.getElementById('loadingNote');
+const defaultNoteText = noteEl.textContent;
+
+const ROOM_SCALE = { position: '0 0 0', scale: '1 1 1' };
+const AR_SCALE = { position: '0 0 -1.2', scale: '0.15 0.15 0.15' };
+
+function setARMode(isAR){
+  const t = isAR ? AR_SCALE : ROOM_SCALE;
+  worldRoot.setAttribute('position', t.position);
+  worldRoot.setAttribute('scale', t.scale);
+  sky.setAttribute('visible', !isAR);
+  floorDisc.setAttribute('visible', !isAR);
+  floorRing.setAttribute('visible', !isAR);
+  noteEl.textContent = isAR ? 'Move your phone slowly to find a surface…' : defaultNoteText;
+}
+
+sceneEl.addEventListener('enter-vr', ()=>{ setARMode(sceneEl.is('ar-mode')); });
+sceneEl.addEventListener('exit-vr', ()=>{ setARMode(false); });
+
+/* ---- WebXR hit-test: detect real surfaces and place the model on tap ---- */
+AFRAME.registerComponent('ar-hit-test', {
+  init: function () {
+    this.hitTestSource = null;
+    this.hasFoundSurface = false;
+    this.onEnterVR = this.onEnterVR.bind(this);
+    this.onExitVR = this.onExitVR.bind(this);
+    this.onSelect = this.onSelect.bind(this);
+    this.el.sceneEl.addEventListener('enter-vr', this.onEnterVR);
+    this.el.sceneEl.addEventListener('exit-vr', this.onExitVR);
+  },
+
+  onEnterVR: function () {
+    const sceneEl = this.el.sceneEl;
+    if (!sceneEl.is('ar-mode')) return;
+
+    this.hitTestSource = null;
+    this.hasFoundSurface = false;
+
+    const renderer = sceneEl.renderer;
+    const session = renderer.xr.getSession();
+    if (!session) return;
+
+    session.requestReferenceSpace('viewer').then((viewerSpace)=>{
+      if (!session.requestHitTestSource) return; // device doesn't support hit-test
+      session.requestHitTestSource({ space: viewerSpace }).then((source)=>{
+        this.hitTestSource = source;
+      }).catch(()=>{ /* hit-test unavailable on this device — model still shows at the default AR spot */ });
+    });
+
+    session.addEventListener('select', this.onSelect);
+    session.addEventListener('end', ()=>{ this.hitTestSource = null; });
+  },
+
+  onExitVR: function () {
+    this.hitTestSource = null;
+    this.el.setAttribute('visible', false);
+  },
+
+  onSelect: function () {
+    if (!this.el.getAttribute('visible')) return;
+    const worldRoot = document.getElementById('worldRoot');
+    worldRoot.object3D.position.copy(this.el.object3D.position);
+    worldRoot.object3D.position.y += 0.02; // hover just above the surface
+    worldRoot.object3D.quaternion.copy(this.el.object3D.quaternion);
+    document.getElementById('loadingNote').textContent = 'Placed! Walk around to explore, or tap again to move it';
+  },
+
+  tick: function () {
+    const sceneEl = this.el.sceneEl;
+    if (!sceneEl.is('ar-mode') || !this.hitTestSource) return;
+
+    const renderer = sceneEl.renderer;
+    const frame = renderer.xr.getFrame ? renderer.xr.getFrame() : null;
+    if (!frame) return;
+
+    const refSpace = renderer.xr.getReferenceSpace();
+    const results = frame.getHitTestResults(this.hitTestSource);
+
+    if (results.length > 0) {
+      const pose = results[0].getPose(refSpace);
+      if (pose) {
+        this.el.setAttribute('visible', true);
+        this.el.object3D.position.set(pose.transform.position.x, pose.transform.position.y, pose.transform.position.z);
+        this.el.object3D.quaternion.set(pose.transform.orientation.x, pose.transform.orientation.y, pose.transform.orientation.z, pose.transform.orientation.w);
+        if (!this.hasFoundSurface) {
+          this.hasFoundSurface = true;
+          document.getElementById('loadingNote').textContent = 'Tap the ring to place the model';
+        }
+      }
+    } else {
+      this.el.setAttribute('visible', false);
+    }
+  }
+});
+
+/* ---- Live AR support diagnostic — tells you exactly why the button is/isn't showing ---- */
+(function(){
+  const diag = document.getElementById('xrDiagnostic');
+  function show(msg, ok){
+    diag.textContent = msg;
+    diag.style.display = 'block';
+    diag.classList.toggle('ok', !!ok);
+  }
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+    show('⚠ Not a secure connection (' + location.protocol + '). WebXR AR only works over HTTPS.');
+    return;
+  }
+  if (!navigator.xr) {
+    show('⚠ This browser has no WebXR support at all. On Android, use Chrome (not an in-app browser, not Firefox/Samsung Internet).');
+    return;
+  }
+  navigator.xr.isSessionSupported('immersive-ar').then(function(supported){
+    if (supported) {
+      show('✓ AR is supported on this device — the AR button should appear bottom-right.', true);
+      setTimeout(()=>{ diag.style.display = 'none'; }, 4000);
+    } else {
+      show('⚠ This browser reports no immersive-ar support. Likely missing "Google Play Services for AR" (install/update it from the Play Store), or this device isn\'t ARCore-certified.');
+    }
+  }).catch(function(err){
+    show('⚠ WebXR check failed: ' + err.message);
+  });
+})();
+</script>
+</body>
+</html>
