@@ -761,6 +761,15 @@ body{
   border-radius:2px;
   transform-origin:0 50%;
 }
+.lone-pair-dot{
+  position:absolute;
+  top:50%; left:50%;
+  width:6px; height:6px;
+  margin:-3px 0 0 -3px;
+  border-radius:50%;
+  background:rgba(255,241,168,0.95);
+  box-shadow:0 0 5px 1px rgba(255,241,168,0.65);
+}
 </style>
 </head>
 <body>
@@ -1444,19 +1453,19 @@ const MOL_COMMON = ["H","He","Li","C","N","O","F","Ne","Na","Mg","Al","Si","P","
 
 const MOLECULES = [
   { comp:{H:2,O:1}, formula:"H₂O", name:"Water", fact:"The universal solvent — covers about 71% of Earth's surface and is essential to all known life.",
-    tree:{atom:'O', shape:{bent:104.5}, children:[{atom:'H'},{atom:'H'}]} },
+    tree:{atom:'O', shape:{bent:104.5}, lonePairs:2, children:[{atom:'H'},{atom:'H'}]} },
   { comp:{H:2,O:2}, formula:"H₂O₂", name:"Hydrogen Peroxide", fact:"A reactive oxidizer used as a disinfectant, and in concentrated form as a rocket propellant oxidizer.",
-    tree:{atom:'O', shape:{bent:98}, children:[{atom:'H'}, {atom:'O', shape:{bent:98}, twist:95, children:[{atom:'H'}]}]} },
+    tree:{atom:'O', shape:{bent:98}, lonePairs:2, children:[{atom:'H'}, {atom:'O', shape:{bent:98}, twist:95, lonePairs:2, children:[{atom:'H'}]}]} },
   { comp:{C:1,O:2}, formula:"CO₂", name:"Carbon Dioxide", fact:"A greenhouse gas produced by respiration and combustion, and the gas that gives soda its fizz.",
     tree:{atom:'C', shape:'linear2', children:[{atom:'O', order:2},{atom:'O', order:2}]} },
   { comp:{C:1,O:1}, formula:"CO", name:"Carbon Monoxide", fact:"A colorless, odorless, and highly toxic gas produced by incomplete combustion.",
-    tree:{atom:'C', children:[{atom:'O', order:3}]} },
+    tree:{atom:'C', lonePairs:1, children:[{atom:'O', order:3}]} },
   { comp:{O:2}, formula:"O₂", name:"Oxygen Gas", fact:"The form of oxygen we breathe, making up about 21% of Earth's atmosphere.",
-    tree:{atom:'O', children:[{atom:'O', order:2}]} },
+    tree:{atom:'O', lonePairs:2, children:[{atom:'O', order:2}]} },
   { comp:{O:3}, formula:"O₃", name:"Ozone", fact:"Forms a protective layer in the stratosphere that blocks most of the Sun's harmful ultraviolet radiation.",
-    tree:{atom:'O', shape:{bent:117}, children:[{atom:'O', order:2},{atom:'O'}]} },
+    tree:{atom:'O', shape:{bent:117}, lonePairs:1, children:[{atom:'O', order:2},{atom:'O'}]} },
   { comp:{N:2}, formula:"N₂", name:"Nitrogen Gas", fact:"An unreactive diatomic gas that makes up 78% of the air we breathe.",
-    tree:{atom:'N', children:[{atom:'N', order:3}]} },
+    tree:{atom:'N', lonePairs:1, children:[{atom:'N', order:3}]} },
   { comp:{H:2}, formula:"H₂", name:"Hydrogen Gas", fact:"The lightest and most abundant gas in the universe, increasingly explored as a clean fuel.",
     tree:{atom:'H', children:[{atom:'H'}]} },
   { comp:{Na:1,Cl:1}, formula:"NaCl", name:"Table Salt", fact:"A violently reactive metal and a toxic gas combine to form the salt that seasons our food.",
@@ -1464,7 +1473,7 @@ const MOLECULES = [
   { comp:{H:1,Cl:1}, formula:"HCl", name:"Hydrogen Chloride", fact:"Dissolved in water it forms hydrochloric acid, a strong acid also found naturally in the stomach.",
     tree:{atom:'H', children:[{atom:'Cl'}]} },
   { comp:{N:1,H:3}, formula:"NH₃", name:"Ammonia", fact:"A pungent gas produced on a massive scale for fertilizers and household cleaners.",
-    tree:{atom:'N', shape:'pyramidal', children:[{atom:'H'},{atom:'H'},{atom:'H'}]} },
+    tree:{atom:'N', shape:'pyramidal', lonePairs:1, children:[{atom:'H'},{atom:'H'},{atom:'H'}]} },
   { comp:{C:1,H:4}, formula:"CH₄", name:"Methane", fact:"The simplest hydrocarbon and main component of natural gas — also a potent greenhouse gas.",
     tree:{atom:'C', shape:'tetrahedral', children:[{atom:'H'},{atom:'H'},{atom:'H'},{atom:'H'}]} },
   { comp:{C:2,H:6}, formula:"C₂H₆", name:"Ethane", fact:"A component of natural gas, mainly used as a feedstock to produce ethylene.",
@@ -1481,18 +1490,18 @@ const MOLECULES = [
   { comp:{Na:1,H:1,C:1,O:3}, formula:"NaHCO₃", name:"Baking Soda", fact:"A mild base used in baking, cleaning, and as a common antacid.",
     tree:{atom:'C', shape:'trigonalPlanar', children:[{atom:'O', order:2},
       {atom:'O', shape:'linear2', children:[{atom:'Na'}]},
-      {atom:'O', shape:{bent:105}, children:[{atom:'H'}]}]} },
+      {atom:'O', shape:{bent:105}, lonePairs:2, children:[{atom:'H'}]}]} },
   { comp:{H:2,S:1,O:4}, formula:"H₂SO₄", name:"Sulfuric Acid", fact:"One of the most widely produced industrial chemicals, used in fertilizers and car batteries.",
     tree:{atom:'S', shape:'tetrahedral', children:[{atom:'O', order:2},{atom:'O', order:2},
-      {atom:'O', shape:{bent:105}, children:[{atom:'H'}]},
-      {atom:'O', shape:{bent:105}, twist:120, children:[{atom:'H'}]}]} },
+      {atom:'O', shape:{bent:105}, lonePairs:2, children:[{atom:'H'}]},
+      {atom:'O', shape:{bent:105}, twist:120, lonePairs:2, children:[{atom:'H'}]}]} },
   { comp:{H:1,N:1,O:3}, formula:"HNO₃", name:"Nitric Acid", fact:"A strong, corrosive acid central to fertilizer and explosives manufacturing.",
     tree:{atom:'N', shape:'trigonalPlanar', children:[{atom:'O', order:2},{atom:'O'},
-      {atom:'O', shape:{bent:102}, children:[{atom:'H'}]}]} },
+      {atom:'O', shape:{bent:102}, lonePairs:2, children:[{atom:'H'}]}]} },
   { comp:{Na:1,O:1,H:1}, formula:"NaOH", name:"Sodium Hydroxide", fact:"Also called lye — a strong base used in soap-making and drain cleaners.",
-    tree:{atom:'O', shape:{bent:110}, children:[{atom:'Na'},{atom:'H'}]} },
+    tree:{atom:'O', shape:{bent:110}, lonePairs:2, children:[{atom:'Na'},{atom:'H'}]} },
   { comp:{K:1,O:1,H:1}, formula:"KOH", name:"Potassium Hydroxide", fact:"A strong base used to make liquid soaps and as the electrolyte in alkaline batteries.",
-    tree:{atom:'O', shape:{bent:110}, children:[{atom:'K'},{atom:'H'}]} },
+    tree:{atom:'O', shape:{bent:110}, lonePairs:2, children:[{atom:'K'},{atom:'H'}]} },
   { comp:{C:1,H:4,O:1}, formula:"CH₃OH", name:"Methanol", fact:"The simplest alcohol, used as a solvent and fuel — but toxic if ingested.",
     tree:{atom:'C', shape:'tetrahedral', children:[{atom:'H'},{atom:'H'},{atom:'H'},
       {atom:'O', shape:{bent:109}, children:[{atom:'H'}]}]} },
@@ -1524,11 +1533,11 @@ const MOLECULES = [
   { comp:{N:2,O:1}, formula:"N₂O", name:"Nitrous Oxide", fact:"Known as laughing gas, used as a mild anesthetic and to propel whipped cream from cans.",
     tree:{atom:'N', shape:'linear2', children:[{atom:'N', order:2},{atom:'O', order:2}]} },
   { comp:{S:1,O:2}, formula:"SO₂", name:"Sulfur Dioxide", fact:"Released by volcanoes and burning fossil fuels, and a major contributor to acid rain.",
-    tree:{atom:'S', shape:{bent:119}, children:[{atom:'O', order:2},{atom:'O', order:2}]} },
+    tree:{atom:'S', shape:{bent:119}, lonePairs:1, children:[{atom:'O', order:2},{atom:'O', order:2}]} },
   { comp:{S:1,O:3}, formula:"SO₃", name:"Sulfur Trioxide", fact:"Reacts with water vapor in the atmosphere to form sulfuric acid, a component of acid rain.",
     tree:{atom:'S', shape:'trigonalPlanar', children:[{atom:'O', order:2},{atom:'O', order:2},{atom:'O', order:2}]} },
   { comp:{H:2,S:1}, formula:"H₂S", name:"Hydrogen Sulfide", fact:"Gives rotten eggs their smell and is highly toxic even at fairly low concentrations.",
-    tree:{atom:'S', shape:{bent:92}, children:[{atom:'H'},{atom:'H'}]} },
+    tree:{atom:'S', shape:{bent:92}, lonePairs:2, children:[{atom:'H'},{atom:'H'}]} },
   { comp:{Ag:1,N:1,O:3}, formula:"AgNO₃", name:"Silver Nitrate", fact:"Used in traditional photographic film and as a topical antiseptic.",
     tree:{atom:'N', shape:'trigonalPlanar', children:[{atom:'O', order:2},{atom:'O'},
       {atom:'O', shape:'linear2', children:[{atom:'Ag'}]}]} },
@@ -1775,10 +1784,34 @@ function resolveShapeVectors(shape){
   return null;
 }
 
-function layoutVseprTree(node, pos, incomingDir, bondLen, bonds){
+function computeLonePairDirections(occupiedDirs, count){
+  if(count <= 0) return [];
+  const sum = occupiedDirs.reduce((acc,d)=>v3.add(acc,d), [0,0,0]);
+  const antiDir = v3.len(sum) > 1e-4 ? v3.norm(v3.neg(sum)) : [0,0,-1];
+  if(count === 1) return [antiDir];
+
+  // count === 2: spread symmetrically around antiDir using a perpendicular axis
+  let spreadAxis = null;
+  if(occupiedDirs.length >= 2){
+    spreadAxis = v3.cross(occupiedDirs[0], occupiedDirs[1]);
+  }
+  if(!spreadAxis || v3.len(spreadAxis) < 1e-4){
+    const ref = Math.abs(antiDir[1]) < 0.9 ? [0,1,0] : [1,0,0];
+    spreadAxis = v3.cross(antiDir, ref);
+  }
+  spreadAxis = v3.norm(spreadAxis);
+  const half = 55 * Math.PI/180;
+  const lp1 = v3.norm(v3.add(v3.scale(antiDir, Math.cos(half)), v3.scale(spreadAxis, Math.sin(half))));
+  const lp2 = v3.norm(v3.add(v3.scale(antiDir, Math.cos(half)), v3.scale(spreadAxis, -Math.sin(half))));
+  return [lp1, lp2];
+}
+
+function layoutVseprTree(node, pos, incomingDir, bondLen, bonds, lonePairsOut){
   bonds = bonds || [];
+  lonePairsOut = lonePairsOut || [];
   const atoms = [{symbol: node.atom, pos}];
   const kids = node.children || [];
+  let dirs = [];
   if(kids.length){
     let vectors = resolveShapeVectors(node.shape);
     if(!vectors){
@@ -1790,7 +1823,6 @@ function layoutVseprTree(node, pos, incomingDir, bondLen, bonds){
         vectors.push([Math.cos(a), Math.sin(a), 0]);
       }
     }
-    let dirs;
     if(incomingDir){
       const targetParentDir = v3.neg(v3.norm(incomingDir));
       const rotated = rotateSetToAlign(vectors, vectors[0], targetParentDir);
@@ -1802,14 +1834,23 @@ function layoutVseprTree(node, pos, incomingDir, bondLen, bonds){
       const axis = v3.norm(incomingDir);
       dirs = dirs.map(d=>rotateAroundAxis(d, axis, node.twist*Math.PI/180));
     }
-    kids.forEach((child,i)=>{
-      const dir = dirs[i] || [1,0,0];
-      const childPos = v3.add(pos, v3.scale(dir, bondLen));
-      bonds.push([pos, childPos, child.order || 1]);
-      const childAtoms = layoutVseprTree(child, childPos, dir, bondLen, bonds);
-      atoms.push(...childAtoms);
-    });
   }
+
+  if(node.lonePairs){
+    const occupied = dirs.slice();
+    if(incomingDir) occupied.push(v3.neg(v3.norm(incomingDir)));
+    const lpDirs = computeLonePairDirections(occupied, node.lonePairs);
+    lonePairsOut.push({pos, dirs: lpDirs});
+  }
+
+  kids.forEach((child,i)=>{
+    const dir = dirs[i] || [1,0,0];
+    const childPos = v3.add(pos, v3.scale(dir, bondLen));
+    bonds.push([pos, childPos, child.order || 1]);
+    const childAtoms = layoutVseprTree(child, childPos, dir, bondLen, bonds, lonePairsOut);
+    atoms.push(...childAtoms);
+  });
+
   return atoms;
 }
 
@@ -1845,6 +1886,28 @@ function renderBondStick(container, p1, p2, scale, order){
   });
 }
 
+function renderLonePair(container, atomPos, dir, scale){
+  const distance = 0.6 * scale;
+  const cx = atomPos[0]*scale + dir[0]*distance;
+  const cy = atomPos[1]*scale + dir[1]*distance;
+  const cz = atomPos[2]*scale + dir[2]*distance;
+
+  let ref = [0,1,0];
+  if(Math.abs(v3.dot(dir, ref)) > 0.9) ref = [1,0,0];
+  const perp = v3.norm(v3.cross(dir, ref));
+  const sep = 5;
+
+  [-1,1].forEach(sign=>{
+    const dot = document.createElement('div');
+    dot.className = 'lone-pair-dot';
+    const px = cx + perp[0]*sep*sign;
+    const py = cy + perp[1]*sep*sign;
+    const pz = cz + perp[2]*sep*sign;
+    dot.style.transform = `translate3d(${px}px, ${py}px, ${pz}px)`;
+    container.appendChild(dot);
+  });
+}
+
 function buildPreciseMoleculeVisual(entry){
   const wrap = document.createElement('div');
   wrap.className = 'atom-perspective';
@@ -1854,13 +1917,18 @@ function buildPreciseMoleculeVisual(entry){
   const bondLen = 1;
   const scale = 50;
   const bonds = [];
-  const atoms = layoutVseprTree(entry.tree, [0,0,0], null, bondLen, bonds);
+  const lonePairs = [];
+  const atoms = layoutVseprTree(entry.tree, [0,0,0], null, bondLen, bonds, lonePairs);
 
   if(entry.satellite){
     entry.satellite.forEach(s=>atoms.push({symbol:s.symbol, pos:s.pos}));
   }
 
   bonds.forEach(([p1,p2,order])=>renderBondStick(mol, p1, p2, scale, order));
+
+  lonePairs.forEach(lp=>{
+    lp.dirs.forEach(dir=>renderLonePair(mol, lp.pos, dir, scale));
+  });
 
   atoms.forEach(a=>{
     const sphere = document.createElement('div');
