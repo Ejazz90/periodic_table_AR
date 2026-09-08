@@ -542,10 +542,31 @@ body{
   opacity:0;
   filter:blur(2px);
 }
-.water-flame.active{ animation:flameFlicker 0.55s ease-in-out infinite alternate; }
+.water-flame.active{ animation:flameFlicker var(--flicker-dur, 0.55s) ease-in-out infinite alternate; }
 @keyframes flameFlicker{
   from{ opacity:0.55; transform:translateX(-50%) scale(0.92); }
   to{ opacity:0.9; transform:translateX(-50%) scale(1.08); }
+}
+.explosion{
+  position:absolute;
+  top:50px; left:50%;
+  width:0; height:0;
+}
+.shard{
+  position:absolute;
+  top:0; left:0;
+  width:7px; height:7px;
+  border-radius:50%;
+  opacity:0;
+  animation-name:shardBurst;
+  animation-timing-function:ease-out;
+  animation-iteration-count:infinite;
+  box-shadow:0 0 6px 1px currentColor;
+}
+@keyframes shardBurst{
+  0%{ transform:translate(-50%,-50%) translate(0,0) scale(0.25); opacity:1; }
+  75%{ opacity:0.7; }
+  100%{ transform:translate(-50%,-50%) translate(var(--dx), var(--dy)) scale(1); opacity:0; }
 }
 
 /* -- flame test stage -- */
@@ -775,7 +796,7 @@ body{
 <div class="main">
   <div id="tableView">
     <div class="ptable" id="ptable"></div>
-    <div class="scroll-hint"></div>
+    <div class="scroll-hint">↔ scroll to see all 18 groups</div>
   </div>
   <div id="listView"></div>
 
@@ -798,6 +819,7 @@ body{
             </div>
             <div class="metal-piece" id="metalPiece"></div>
             <div class="bubbles" id="bubbles"></div>
+            <div class="explosion" id="explosion"></div>
           </div>
         </div>
       </div>
@@ -1267,13 +1289,19 @@ function renderWater(item){
   const metal = document.getElementById('metalPiece');
   const flame = document.getElementById('waterFlame');
   const bubbles = document.getElementById('bubbles');
+  const explosion = document.getElementById('explosion');
   const desc = document.getElementById('waterDesc');
   const info = byName(item.s);
 
   metal.textContent = item.s;
   metal.style.background = `var(--c-${catVar(info.cat)})`;
 
+  // Reactivity drives explosion SPEED: higher level = faster, more violent bursts
+  const explosionDur = (1.9 - item.level * 0.28).toFixed(2); // level2≈1.34s ... level5≈0.5s
+  const flickerDur = (0.85 - item.level * 0.1).toFixed(2);   // faster flame flicker for higher reactivity
+
   flame.style.background = `radial-gradient(circle, ${item.flame}, transparent 70%)`;
+  flame.style.setProperty('--flicker-dur', flickerDur + 's');
   flame.classList.toggle('active', item.level >= 3);
 
   bubbles.innerHTML = '';
@@ -1284,6 +1312,25 @@ function renderWater(item){
     b.style.animationDuration = (1 + Math.random()*1.2 - item.level*0.08) + 's';
     b.style.animationDelay = (Math.random()*1.5) + 's';
     bubbles.appendChild(b);
+  }
+
+  // Explosion shards: more shards, faster speed, and greater spread for higher reactivity
+  explosion.innerHTML = '';
+  const shardCount = 5 + item.level * 4; // level2:13 ... level5:25
+  const spreadPx = 18 + item.level * 10;  // level2:38 ... level5:68
+  for(let i=0;i<shardCount;i++){
+    const shard = document.createElement('div');
+    shard.className = 'shard';
+    const angle = Math.random() * Math.PI * 2;
+    const dist = spreadPx * (0.5 + Math.random()*0.6);
+    shard.style.setProperty('--dx', (Math.cos(angle)*dist).toFixed(1) + 'px');
+    shard.style.setProperty('--dy', (Math.sin(angle)*dist*0.6 - dist*0.3).toFixed(1) + 'px');
+    shard.style.color = item.flame;
+    shard.style.background = item.flame;
+    const dur = explosionDur * (0.75 + Math.random()*0.5);
+    shard.style.animationDuration = dur.toFixed(2) + 's';
+    shard.style.animationDelay = (-Math.random()*dur).toFixed(2) + 's'; // stagger phase so bursts feel continuous
+    explosion.appendChild(shard);
   }
 
   desc.innerHTML = `<strong>${info.name}</strong> + water — Reactivity: ${'●'.repeat(item.level)}${'○'.repeat(5-item.level)}<br>${item.desc}`;
@@ -1401,15 +1448,15 @@ const MOLECULES = [
   { comp:{H:2,O:2}, formula:"H₂O₂", name:"Hydrogen Peroxide", fact:"A reactive oxidizer used as a disinfectant, and in concentrated form as a rocket propellant oxidizer.",
     tree:{atom:'O', shape:{bent:98}, children:[{atom:'H'}, {atom:'O', shape:{bent:98}, twist:95, children:[{atom:'H'}]}]} },
   { comp:{C:1,O:2}, formula:"CO₂", name:"Carbon Dioxide", fact:"A greenhouse gas produced by respiration and combustion, and the gas that gives soda its fizz.",
-    tree:{atom:'C', shape:'linear2', children:[{atom:'O'},{atom:'O'}]} },
+    tree:{atom:'C', shape:'linear2', children:[{atom:'O', order:2},{atom:'O', order:2}]} },
   { comp:{C:1,O:1}, formula:"CO", name:"Carbon Monoxide", fact:"A colorless, odorless, and highly toxic gas produced by incomplete combustion.",
-    tree:{atom:'C', children:[{atom:'O'}]} },
+    tree:{atom:'C', children:[{atom:'O', order:3}]} },
   { comp:{O:2}, formula:"O₂", name:"Oxygen Gas", fact:"The form of oxygen we breathe, making up about 21% of Earth's atmosphere.",
-    tree:{atom:'O', children:[{atom:'O'}]} },
+    tree:{atom:'O', children:[{atom:'O', order:2}]} },
   { comp:{O:3}, formula:"O₃", name:"Ozone", fact:"Forms a protective layer in the stratosphere that blocks most of the Sun's harmful ultraviolet radiation.",
-    tree:{atom:'O', shape:{bent:117}, children:[{atom:'O'},{atom:'O'}]} },
+    tree:{atom:'O', shape:{bent:117}, children:[{atom:'O', order:2},{atom:'O'}]} },
   { comp:{N:2}, formula:"N₂", name:"Nitrogen Gas", fact:"An unreactive diatomic gas that makes up 78% of the air we breathe.",
-    tree:{atom:'N', children:[{atom:'N'}]} },
+    tree:{atom:'N', children:[{atom:'N', order:3}]} },
   { comp:{H:2}, formula:"H₂", name:"Hydrogen Gas", fact:"The lightest and most abundant gas in the universe, increasingly explored as a clean fuel.",
     tree:{atom:'H', children:[{atom:'H'}]} },
   { comp:{Na:1,Cl:1}, formula:"NaCl", name:"Table Salt", fact:"A violently reactive metal and a toxic gas combine to form the salt that seasons our food.",
@@ -1425,22 +1472,22 @@ const MOLECULES = [
       {atom:'C', shape:'tetrahedral', twist:60, children:[{atom:'H'},{atom:'H'},{atom:'H'}]}]} },
   { comp:{C:2,H:4}, formula:"C₂H₄", name:"Ethylene", fact:"A plant ripening hormone and the single most-produced organic compound in the chemical industry.",
     tree:{atom:'C', shape:'trigonalPlanar', children:[{atom:'H'},{atom:'H'},
-      {atom:'C', shape:'trigonalPlanar', twist:0, children:[{atom:'H'},{atom:'H'}]}]} },
+      {atom:'C', shape:'trigonalPlanar', twist:0, order:2, children:[{atom:'H'},{atom:'H'}]}]} },
   { comp:{C:2,H:2}, formula:"C₂H₂", name:"Acetylene", fact:"Burns extremely hot, which is why it's used in oxy-acetylene torches for welding and cutting metal.",
-    tree:{atom:'C', shape:'linear2', children:[{atom:'H'}, {atom:'C', shape:'linear2', children:[{atom:'H'}]}]} },
+    tree:{atom:'C', shape:'linear2', children:[{atom:'H'}, {atom:'C', shape:'linear2', order:3, children:[{atom:'H'}]}]} },
   { comp:{Ca:1,C:1,O:3}, formula:"CaCO₃", name:"Calcium Carbonate", fact:"The main mineral in limestone, marble, chalk, and seashells.",
-    tree:{atom:'C', shape:'trigonalPlanar', children:[{atom:'O'},{atom:'O'},
+    tree:{atom:'C', shape:'trigonalPlanar', children:[{atom:'O', order:2},{atom:'O'},
       {atom:'O', shape:'linear2', children:[{atom:'Ca'}]}]} },
   { comp:{Na:1,H:1,C:1,O:3}, formula:"NaHCO₃", name:"Baking Soda", fact:"A mild base used in baking, cleaning, and as a common antacid.",
-    tree:{atom:'C', shape:'trigonalPlanar', children:[{atom:'O'},
+    tree:{atom:'C', shape:'trigonalPlanar', children:[{atom:'O', order:2},
       {atom:'O', shape:'linear2', children:[{atom:'Na'}]},
       {atom:'O', shape:{bent:105}, children:[{atom:'H'}]}]} },
   { comp:{H:2,S:1,O:4}, formula:"H₂SO₄", name:"Sulfuric Acid", fact:"One of the most widely produced industrial chemicals, used in fertilizers and car batteries.",
-    tree:{atom:'S', shape:'tetrahedral', children:[{atom:'O'},{atom:'O'},
+    tree:{atom:'S', shape:'tetrahedral', children:[{atom:'O', order:2},{atom:'O', order:2},
       {atom:'O', shape:{bent:105}, children:[{atom:'H'}]},
       {atom:'O', shape:{bent:105}, twist:120, children:[{atom:'H'}]}]} },
   { comp:{H:1,N:1,O:3}, formula:"HNO₃", name:"Nitric Acid", fact:"A strong, corrosive acid central to fertilizer and explosives manufacturing.",
-    tree:{atom:'N', shape:'trigonalPlanar', children:[{atom:'O'},{atom:'O'},
+    tree:{atom:'N', shape:'trigonalPlanar', children:[{atom:'O', order:2},{atom:'O'},
       {atom:'O', shape:{bent:102}, children:[{atom:'H'}]}]} },
   { comp:{Na:1,O:1,H:1}, formula:"NaOH", name:"Sodium Hydroxide", fact:"Also called lye — a strong base used in soap-making and drain cleaners.",
     tree:{atom:'O', shape:{bent:110}, children:[{atom:'Na'},{atom:'H'}]} },
@@ -1460,33 +1507,33 @@ const MOLECULES = [
     tree:{atom:'Mg', children:[{atom:'O'}]} },
   { comp:{Fe:2,O:3}, formula:"Fe₂O₃", name:"Iron(III) Oxide", fact:"Forms when iron reacts with oxygen and moisture — the reddish-brown coating known as rust." },
   { comp:{Si:1,O:2}, formula:"SiO₂", name:"Silica", fact:"The main component of sand and quartz, and the raw material for glass and computer chips.",
-    tree:{atom:'Si', shape:'linear2', children:[{atom:'O'},{atom:'O'}]} },
+    tree:{atom:'Si', shape:'linear2', children:[{atom:'O', order:2},{atom:'O', order:2}]} },
   { comp:{N:1,H:4,Cl:1}, formula:"NH₄Cl", name:"Ammonium Chloride", fact:"Used in dry-cell batteries and, surprisingly, as a flavoring in some salty licorice candy.",
     tree:{atom:'N', shape:'tetrahedral', children:[{atom:'H'},{atom:'H'},{atom:'H'},{atom:'H'}]},
     satellite:[{symbol:'Cl', pos:[0,0,-2]}] },
   { comp:{Ca:1,Cl:2}, formula:"CaCl₂", name:"Calcium Chloride", fact:"Commonly spread on icy roads because it lowers the freezing point of water." },
   { comp:{Mg:1,S:1,O:4}, formula:"MgSO₄", name:"Epsom Salt", fact:"Dissolved in warm baths for sore muscles, and used as a fertilizer for magnesium-hungry plants.",
-    tree:{atom:'S', shape:'tetrahedral', children:[{atom:'O'},{atom:'O'},{atom:'O'},
+    tree:{atom:'S', shape:'tetrahedral', children:[{atom:'O', order:2},{atom:'O', order:2},{atom:'O'},
       {atom:'O', shape:'linear2', children:[{atom:'Mg'}]}]} },
   { comp:{K:1,N:1,O:3}, formula:"KNO₃", name:"Potassium Nitrate", fact:"Also called saltpeter — a key ingredient in gunpowder and some food preservatives.",
-    tree:{atom:'N', shape:'trigonalPlanar', children:[{atom:'O'},{atom:'O'},
+    tree:{atom:'N', shape:'trigonalPlanar', children:[{atom:'O', order:2},{atom:'O'},
       {atom:'O', shape:'linear2', children:[{atom:'K'}]}]} },
   { comp:{C:12,H:22,O:11}, formula:"C₁₂H₂₂O₁₁", name:"Sucrose", fact:"Ordinary table sugar, made of a glucose unit and a fructose unit joined together." },
   { comp:{N:1,O:2}, formula:"NO₂", name:"Nitrogen Dioxide", fact:"A reddish-brown pollutant gas produced by vehicle engines and power plants.",
-    tree:{atom:'N', shape:{bent:134}, children:[{atom:'O'},{atom:'O'}]} },
+    tree:{atom:'N', shape:{bent:134}, children:[{atom:'O', order:2},{atom:'O', order:2}]} },
   { comp:{N:2,O:1}, formula:"N₂O", name:"Nitrous Oxide", fact:"Known as laughing gas, used as a mild anesthetic and to propel whipped cream from cans.",
-    tree:{atom:'N', shape:'linear2', children:[{atom:'N'},{atom:'O'}]} },
+    tree:{atom:'N', shape:'linear2', children:[{atom:'N', order:2},{atom:'O', order:2}]} },
   { comp:{S:1,O:2}, formula:"SO₂", name:"Sulfur Dioxide", fact:"Released by volcanoes and burning fossil fuels, and a major contributor to acid rain.",
-    tree:{atom:'S', shape:{bent:119}, children:[{atom:'O'},{atom:'O'}]} },
+    tree:{atom:'S', shape:{bent:119}, children:[{atom:'O', order:2},{atom:'O', order:2}]} },
   { comp:{S:1,O:3}, formula:"SO₃", name:"Sulfur Trioxide", fact:"Reacts with water vapor in the atmosphere to form sulfuric acid, a component of acid rain.",
-    tree:{atom:'S', shape:'trigonalPlanar', children:[{atom:'O'},{atom:'O'},{atom:'O'}]} },
+    tree:{atom:'S', shape:'trigonalPlanar', children:[{atom:'O', order:2},{atom:'O', order:2},{atom:'O', order:2}]} },
   { comp:{H:2,S:1}, formula:"H₂S", name:"Hydrogen Sulfide", fact:"Gives rotten eggs their smell and is highly toxic even at fairly low concentrations.",
     tree:{atom:'S', shape:{bent:92}, children:[{atom:'H'},{atom:'H'}]} },
   { comp:{Ag:1,N:1,O:3}, formula:"AgNO₃", name:"Silver Nitrate", fact:"Used in traditional photographic film and as a topical antiseptic.",
-    tree:{atom:'N', shape:'trigonalPlanar', children:[{atom:'O'},{atom:'O'},
+    tree:{atom:'N', shape:'trigonalPlanar', children:[{atom:'O', order:2},{atom:'O'},
       {atom:'O', shape:'linear2', children:[{atom:'Ag'}]}]} },
   { comp:{Cu:1,S:1,O:4}, formula:"CuSO₄", name:"Copper Sulfate", fact:"Forms striking blue crystals and is used as a fungicide and in electroplating.",
-    tree:{atom:'S', shape:'tetrahedral', children:[{atom:'O'},{atom:'O'},{atom:'O'},
+    tree:{atom:'S', shape:'tetrahedral', children:[{atom:'O', order:2},{atom:'O', order:2},{atom:'O'},
       {atom:'O', shape:'linear2', children:[{atom:'Cu'}]}]} },
   { comp:{Al:1,Cl:3}, formula:"AlCl₃", name:"Aluminium Chloride", fact:"Used as a catalyst in organic chemistry and as the active ingredient in some antiperspirants.",
     tree:{atom:'Al', shape:'trigonalPlanar', children:[{atom:'Cl'},{atom:'Cl'},{atom:'Cl'}]} },
@@ -1511,7 +1558,7 @@ const MOLECULES = [
     tree:{atom:'C', shape:'trigonalPlanar', children:[
       {atom:'O', shape:'linear2', children:[{atom:'Na'}]},
       {atom:'O', shape:'linear2', children:[{atom:'Na'}]},
-      {atom:'O'}]} },
+      {atom:'O', order:2}]} },
 ];
 
 let molSlots = [];
@@ -1758,7 +1805,7 @@ function layoutVseprTree(node, pos, incomingDir, bondLen, bonds){
     kids.forEach((child,i)=>{
       const dir = dirs[i] || [1,0,0];
       const childPos = v3.add(pos, v3.scale(dir, bondLen));
-      bonds.push([pos, childPos]);
+      bonds.push([pos, childPos, child.order || 1]);
       const childAtoms = layoutVseprTree(child, childPos, dir, bondLen, bonds);
       atoms.push(...childAtoms);
     });
@@ -1766,7 +1813,8 @@ function layoutVseprTree(node, pos, incomingDir, bondLen, bonds){
   return atoms;
 }
 
-function renderBondStick(container, p1, p2, scale){
+function renderBondStick(container, p1, p2, scale, order){
+  order = order || 1;
   const a = [p1[0]*scale, p1[1]*scale, p1[2]*scale];
   const b = [p2[0]*scale, p2[1]*scale, p2[2]*scale];
   const d = [b[0]-a[0], b[1]-a[1], b[2]-a[2]];
@@ -1779,13 +1827,22 @@ function renderBondStick(container, p1, p2, scale){
   const rz = v3.norm(v3.cross(rx, ref));
   const ry = v3.cross(rz, rx);
 
-  const bond = document.createElement('div');
-  bond.className = 'mol-bond';
-  bond.style.width = len + 'px';
-  bond.style.transform =
-    `translate3d(${a[0]}px, ${a[1]}px, ${a[2]}px) ` +
-    `matrix3d(${rx[0]},${rx[1]},${rx[2]},0, ${ry[0]},${ry[1]},${ry[2]},0, ${rz[0]},${rz[1]},${rz[2]},0, 0,0,0,1)`;
-  container.appendChild(bond);
+  // Double/triple bonds are drawn as parallel sticks offset along the ry axis
+  const offsets = order === 3 ? [-4.5, 0, 4.5] : order === 2 ? [-3, 3] : [0];
+  const thickness = order > 1 ? 3.5 : 5;
+
+  offsets.forEach(off=>{
+    const ax = a[0] + ry[0]*off, ay = a[1] + ry[1]*off, az = a[2] + ry[2]*off;
+    const bond = document.createElement('div');
+    bond.className = 'mol-bond';
+    bond.style.width = len + 'px';
+    bond.style.height = thickness + 'px';
+    bond.style.marginTop = (-thickness/2) + 'px';
+    bond.style.transform =
+      `translate3d(${ax}px, ${ay}px, ${az}px) ` +
+      `matrix3d(${rx[0]},${rx[1]},${rx[2]},0, ${ry[0]},${ry[1]},${ry[2]},0, ${rz[0]},${rz[1]},${rz[2]},0, 0,0,0,1)`;
+    container.appendChild(bond);
+  });
 }
 
 function buildPreciseMoleculeVisual(entry){
@@ -1803,7 +1860,7 @@ function buildPreciseMoleculeVisual(entry){
     entry.satellite.forEach(s=>atoms.push({symbol:s.symbol, pos:s.pos}));
   }
 
-  bonds.forEach(([p1,p2])=>renderBondStick(mol, p1, p2, scale));
+  bonds.forEach(([p1,p2,order])=>renderBondStick(mol, p1, p2, scale, order));
 
   atoms.forEach(a=>{
     const sphere = document.createElement('div');
